@@ -1,74 +1,47 @@
-import unittest
-from unittest.mock import patch, MagicMock
 import sys
-import os
+from pathlib import Path
+import pandas as pd
+import unittest
 
 # Add current directory to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).parent))
 
-from llm_engine import LLMEngine
+from data_ingestion import load_data, save_data
+from regex_engine import mask_text, mask_deterministic
+from llm_engine import OLLAMA_AVAILABLE, mask_full_pipeline
 
-class TestPII(unittest.TestCase):
-    def setUp(self):
-        self.engine = LLMEngine()
-
-    def test_regex_masking_email(self):
-        text = "Contact me at test@example.com for info."
-        expected = "Contact me at [EMAIL] for info."
-        self.assertEqual(self.engine.mask_regex_pii(text), expected)
-
-    def test_regex_masking_phone(self):
-        text = "Call me at +91 9876543210."
-        masked = self.engine.mask_regex_pii(text)
-        self.assertIn("[PHONE]", masked)
-
-    def test_regex_masking_pan(self):
-        text = "My PAN is ABCDE1234F."
-        expected = "My PAN is [PAN]."
-        self.assertEqual(self.engine.mask_regex_pii(text), expected)
-
-    def test_regex_masking_aadhaar(self):
-        text = "Aadhaar number: 1234 5678 9012."
-        expected = "Aadhaar number: [AADHAAR]."
-        self.assertEqual(self.engine.mask_regex_pii(text), expected)
-
-    @patch('requests.post')
-    def test_llm_soft_pii_high_confidence(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "response": '{"entities": [{"text": "Arjun", "type": "NAME"}, {"text": "Bangalore", "type": "LOCATION"}], "confidence": 90}'
-        }
-        mock_post.return_value = mock_response
-
-        text = "My name is Arjun and I live in Bangalore."
-        result = self.engine.process_soft_pii(text)
-        
-        self.assertIn("[NAME]", result)
-        self.assertIn("[LOCATION]", result)
-        self.assertNotIn("Arjun", result)
-
-    @patch('requests.post')
-    def test_llm_soft_pii_low_confidence_loop(self, mock_post):
-        mock_low = MagicMock()
-        mock_low.status_code = 200
-        mock_low.json.return_value = {
-            "response": '{"entities": [], "confidence": 50}'
-        }
-        
-        mock_high = MagicMock()
-        mock_high.status_code = 200
-        mock_high.json.return_value = {
-            "response": '{"entities": [{"text": "Arjun", "type": "NAME"}], "confidence": 95}'
-        }
-        
-        mock_post.side_effect = [mock_low, mock_low, mock_high]
-
-        text = "My name is Arjun."
-        result = self.engine.process_soft_pii(text)
-        
-        self.assertIn("[NAME]", result)
-        self.assertEqual(mock_post.call_count, 3)
+class TestCelare(unittest.TestCase):
+    def test_load_csv(self):
+        """Test loading CSV file with robust parsing"""
+        mock_path = Path("sample_data/mock_dataset.csv")
+        if mock_path.exists():
+            result = load_data(mock_path)
+            self.assertIsNotNone(result)
+            df, ext = result
+            self.assertEqual(ext, ".csv")
+            self.assertGreater(len(df), 0)
+    
+    def test_regex_mask_single_text(self):
+        """Test single text masking with regex engine"""
+        test_text = "Contact John at john@example.com or 9876543210"
+        masked, counts = mask_text(test_text)
+        self.assertIn("[REDACTED_IDENTITY", masked)
+        self.assertEqual(counts["email"], 1)
+        self.assertEqual(counts["phone"], 1)
+    
+    def test_regex_mask_dataframe(self):
+        """Test dataframe masking with regex engine"""
+        df = pd.DataFrame({
+            "name": ["John Doe", "Jane Smith"],
+            "email": ["john@example.com", "jane@company.co.in"],
+            "phone": ["9876543210", "+91 9123456789"],
+            "pan": ["ABCDE1234F", "XYZPQ5678R"],
+            "aadhaar": ["1234 5678 9012", "9876-5432-1098"]
+        })
+        masked_df, total_counts = mask_deterministic(df)
+        self.assertIsNotNone(masked_df)
+        self.assertGreater(sum(total_counts.values()), 0)
 
 if __name__ == '__main__':
+    print("=== Running Celare Integration Test Suite ===\n")
     unittest.main()

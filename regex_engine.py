@@ -55,7 +55,8 @@ def mask_deterministic(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     masked_df = df.copy()
     total_counts = {key: 0 for key in PII_PATTERNS}
     
-    for col in masked_df.select_dtypes(include=["object"]).columns:
+    # Handle both 'object' and 'string' dtypes
+    for col in masked_df.select_dtypes(include=["object", "string"]).columns:
         processed = []
         for val in df[col]:
             masked_val, counts = mask_text(val)
