@@ -9,76 +9,6 @@ from regex_engine import mask_deterministic
 # Set page config
 st.set_page_config(page_title="Celare - PII Detector & Masker", page_icon="🛡️", layout="centered")
 
-# Custom CSS for sleek modern AI layout
-st.markdown("""
-    <style>
-        /* Main page styling */
-        .main {
-            background-color: #0E1117;
-            color: #FFFFFF;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            justify-content: space-between;
-        }
-        
-        /* Logo container */
-        .logo-container {
-            text-align: center;
-            padding: 40px 0 20px 0;
-        }
-        
-        .logo-container img {
-            max-width: 250px;
-        }
-        
-        /* Footer styling */
-        .footer {
-            text-align: center;
-            color: #8B949E;
-            padding: 20px 0;
-            font-size: 14px;
-        }
-        
-        /* Data display area */
-        .data-area {
-            flex-grow: 1;
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-            width: 100%;
-        }
-        
-        /* Buttons */
-        .stButton > button {
-            background-color: #00FF88;
-            color: #0E1117;
-            border-radius: 8px;
-            border: none;
-            font-weight: bold;
-        }
-        
-        .stButton > button:hover {
-            background-color: #00CC6F;
-        }
-        
-        /* File uploader */
-        .stFileUploader {
-            background-color: #161A23;
-            border-radius: 12px;
-            padding: 20px;
-        }
-        
-        /* Metrics cards */
-        .metric-card {
-            background-color: #161A23;
-            padding: 16px;
-            border-radius: 8px;
-            text-align: center;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
 # Initialize session state
 if "active_df" not in st.session_state:
     st.session_state.active_df = None
@@ -91,19 +21,27 @@ if "original_filename" not in st.session_state:
 if "processed" not in st.session_state:
     st.session_state.processed = False
 
-# Main content area
-st.markdown("<div class='main'>", unsafe_allow_html=True)
+# Center logo
+left, center, right = st.columns([1, 2, 1])
+with center:
+    try:
+        st.image("logo.png", width=150)
+    except:
+        pass
 
-st.markdown("<div class='logo-container'>", unsafe_allow_html=True)
-try:
-    st.image("logo.png")
-except:
-    st.title("🛡️ Celare")
-st.markdown("</div>", unsafe_allow_html=True)
+st.title("🛡️ Celare - PII Detector & Masker")
+st.markdown("<br>", unsafe_allow_html=True)
 
-st.markdown("<div class='data-area'>", unsafe_allow_html=True)
+uploaded_file = st.file_uploader(
+    "PII Detector & Masker | Upload your file | 200MB per file • CSV, JSON, XLSX",
+    type=["csv", "json", "xlsx"]
+)
 
+st.markdown("<p style='text-align: center; color: gray;'>v1.0.0 | Celare Project</p>", unsafe_allow_html=True)
+
+# Data display area
 if st.session_state.active_df is not None and st.session_state.processed:
+    st.markdown("---")
     st.subheader("Data Preview")
     col_original, col_masked = st.columns(2)
     with col_original:
@@ -113,7 +51,7 @@ if st.session_state.active_df is not None and st.session_state.processed:
         st.markdown("**Masked Data**")
         st.dataframe(st.session_state.masked_df, use_container_width=True)
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("---")
     st.subheader("PII Detection Summary")
     cols = st.columns(4)
     pii_types = ["email", "phone", "pan", "aadhaar"]
@@ -122,8 +60,7 @@ if st.session_state.active_df is not None and st.session_state.processed:
         with cols[i]:
             st.metric(display, st.session_state.pii_counts[pii_type])
     
-    st.markdown("<br>", unsafe_allow_html=True)
-    
+    st.markdown("---")
     col_export, col_report = st.columns(2)
     with col_export:
         output_format = st.selectbox("Select Export Format", ["CSV", "JSON", "XLSX"])
@@ -146,15 +83,7 @@ if st.session_state.active_df is not None and st.session_state.processed:
         report_content += f"\nTotal PII Found: {sum(st.session_state.pii_counts.values())}"
         st.download_button("📄 Download Verification Report", report_content, "verification_report.md", "text/markdown")
 
-st.markdown("</div>", unsafe_allow_html=True)
-
-# Bottom-centered uploader
-st.markdown("<div style='padding: 20px;'>", unsafe_allow_html=True)
-uploaded_file = st.file_uploader("PII Detector & Masker | Upload your file | 200MB per file • CSV, JSON, XLSX", type=["csv", "json", "xlsx"], key="main_uploader")
-st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown("<div class='footer'>v1.0.0 | Celare Project</div>", unsafe_allow_html=True)
-
+# Handle file upload
 if uploaded_file is not None:
     temp_path = Path(f"temp_upload{Path(uploaded_file.name).suffix}")
     with open(temp_path, "wb") as f:
@@ -182,6 +111,7 @@ else:
                 st.session_state.processed = True
                 st.session_state.original_filename = "mock_dataset.csv"
 
+# Cleanup temp files
 if Path("temp_output.csv").exists(): Path("temp_output.csv").unlink(missing_ok=True)
 if Path("temp_output.json").exists(): Path("temp_output.json").unlink(missing_ok=True)
 if Path("temp_output.xlsx").exists(): Path("temp_output.xlsx").unlink(missing_ok=True)
