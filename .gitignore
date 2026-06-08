@@ -125,3 +125,4 @@ data/
 .DS_Store
 Thumbs.db
 *.vsix
+!logo.png
