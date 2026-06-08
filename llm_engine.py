@@ -1,122 +1,116 @@
-import re
-import requests
+import pandas as pd
+from typing import Tuple, Dict, List, Optional
 import json
-import logging
-from typing import List, Dict, Any
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Try to import Ollama, provide fallback if not available
+try:
+    import ollama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    print("Warning: Ollama not installed. Indirect PII detection will be skipped.")
 
-class LLMEngine:
-    def __init__(self, model: str = "llama3.2", base_url: str = "http://localhost:11434"):
-        self.model = model
-        self.api_url = f"{base_url}/api/generate"
+def analyze_text_indirect(text: str, model: str = "llama3.1") -> Tuple[str, bool]:
+    """
+    Use a local Ollama LLM to detect indirect PII combinations in text.
+    
+    Args:
+        text: Input text to analyze
+        model: Name of Ollama model to use
+        
+    Returns:
+        Tuple of (masked_text, contains_indirect_pii)
+    """
+    if not OLLAMA_AVAILABLE:
+        return text, False
+    
+    if pd.isna(text) or not str(text).strip():
+        return text, False
+    
+    system_prompt = """
+    You are a PII detection specialist. Your task is to analyze text and identify INDIRECT PII.
+    INDIRECT PII is when two or more non-sensitive pieces of information are combined to reveal identity.
+    Examples of INDIRECT PII combinations:
+    - Full Name + Date of Birth
+    - Full Name + Specific Salary
+    - Address + Medical Condition
+    - Date of Birth + Place of Birth
+    - Email + Phone + Name
+    
+    For each text you analyze, respond ONLY with a valid JSON object in this exact format:
+    {
+        "contains_indirect_pii": true/false,
+        "masked_text": "text with indirect PII replaced by [REDACTED_IDENTITY]"
+    }
+    
+    Rules:
+    1. Only replace the specific parts that form the indirect PII combination
+    2. Do NOT replace normal operational data
+    3. Always return valid JSON with both keys
+    4. If no indirect PII, return the original text
+    """
+    
+    try:
+        response = ollama.generate(
+            model=model,
+            prompt=str(text),
+            system=system_prompt,
+            format="json"
+        )
+        
+        result = json.loads(response["response"])
+        return result.get("masked_text", text), result.get("contains_indirect_pii", False)
+    except Exception as e:
+        print(f"Warning: Ollama analysis failed: {e}")
+        return text, False
 
-    def mask_regex_pii(self, text: str) -> str:
-        """
-        Masks Email, Phone, PAN, and Aadhaar using regex.
-        """
-        # Email: basic pattern
-        text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL]', text)
+def mask_indirect(df: pd.DataFrame, model: str = "llama3.1") -> Tuple[pd.DataFrame, int]:
+    """
+    Apply indirect PII masking to an entire DataFrame using Ollama.
+    
+    Args:
+        df: Input DataFrame (already processed for direct PII)
+        model: Ollama model name
         
-        # Phone: Supports +91, 10 digits, etc.
-        text = re.sub(r'(\+91[\-\s]?)?[6-9]\d{9}', '[PHONE]', text)
-        
-        # PAN: 5 letters, 4 digits, 1 letter
-        text = re.sub(r'[A-Z]{5}[0-9]{4}[A-Z]{1}', '[PAN]', text)
-        
-        # Aadhaar: 12 digits (often 4-4-4)
-        text = re.sub(r'\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b', '[AADHAAR]', text)
-        
-        return text
+    Returns:
+        Tuple of (masked_df, total_indirect_pii_count)
+    """
+    if not OLLAMA_AVAILABLE:
+        return df, 0
+    
+    masked_df = df.copy()
+    total_count = 0
+    
+    for col in masked_df.select_dtypes(include=["object"]).columns:
+        processed = []
+        for val in df[col]:
+            masked_val, has_indirect = analyze_text_indirect(val, model)
+            processed.append(masked_val)
+            if has_indirect:
+                total_count += 1
+        masked_df[col] = processed
+    
+    return masked_df, total_count
 
-    def _call_ollama(self, prompt: str) -> Dict[str, Any]:
-        """
-        Helper to call local Ollama API.
-        """
-        try:
-            payload = {
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-                "format": "json",
-                "options": {
-                    "temperature": 0
-                }
-            }
-            response = requests.post(self.api_url, json=payload, timeout=30)
-            response.raise_for_status()
-            return json.loads(response.json().get("response", "{}"))
-        except Exception as e:
-            logger.error(f"Ollama API error: {e}")
-            return {"entities": [], "confidence": 0}
-
-    def process_soft_pii(self, text: str) -> str:
-        """
-        Processes Names and Locations using an autonomous Agent Loop with Ollama.
-        """
-        current_text = text
-        max_retries = 3
+def mask_full_pipeline(df: pd.DataFrame, model: str = "llama3.1") -> Tuple[pd.DataFrame, Dict[str, int]]:
+    """
+    End-to-end pipeline: first mask direct PII, then indirect PII.
+    
+    Args:
+        df: Input DataFrame
+        model: Ollama model name
         
-        for attempt in range(max_retries):
-            # Formulate prompt with sentence context
-            prompt = (
-                f"Identify 'NAME' and 'LOCATION' entities in the following text. "
-                f"Return ONLY a JSON object with two keys: "
-                f"'entities' (list of {{'text': str, 'type': 'NAME'|'LOCATION'}}) "
-                f"and 'confidence' (integer 0-100 representing your certainty).\n\n"
-                f"Text: \"{current_text}\"\n\n"
-                f"Output JSON:"
-            )
-            
-            result = self._call_ollama(prompt)
-            confidence = result.get("confidence", 0)
-            entities = result.get("entities", [])
-            
-            logger.info(f"Attempt {attempt + 1}: Confidence {confidence}%")
-            
-            if confidence >= 85:
-                # High confidence: Redact entities
-                for entity in entities:
-                    entity_text = entity.get("text")
-                    entity_type = entity.get("type")
-                    if entity_text and entity_type:
-                        # Case insensitive replacement for safety
-                        pattern = re.compile(re.escape(entity_text), re.IGNORECASE)
-                        current_text = pattern.sub(f"[{entity_type}]", current_text)
-                return current_text
-            else:
-                # Low confidence: Reprompt with more explicit context (Agent Loop)
-                logger.warning(f"Low confidence ({confidence}%). Retrying with enhanced context...")
-                # In the loop, we could potentially refine the text or prompt
-                # For this implementation, we simulate the 're-prompt' by asking for more precision
-                continue
-        
-        # If still low confidence after retries, we might want to mask anyway or leave as is.
-        # Requirement says "until validated or masked". We'll perform a best-effort masking.
-        for entity in entities:
-            entity_text = entity.get("text")
-            entity_type = entity.get("type")
-            if entity_text and entity_type:
-                pattern = re.compile(re.escape(entity_text), re.IGNORECASE)
-                current_text = pattern.sub(f"[{entity_type}]", current_text)
-                
-        return current_text
-
-    def anonymize(self, text: str) -> str:
-        """
-        Complete anonymization pipeline.
-        """
-        # 1. Regex Masking
-        text = self.mask_regex_pii(text)
-        
-        # 2. LLM Soft PII Redaction
-        text = self.process_soft_pii(text)
-        
-        return text
-
-if __name__ == "__main__":
-    engine = LLMEngine()
-    sample = "My name is Arjun and I live in Bangalore. My email is arjun@example.com and PAN is ABCDE1234F."
-    print(engine.anonymize(sample))
+    Returns:
+        Tuple of (masked_df, counts_dict)
+    """
+    from regex_engine import mask_deterministic
+    
+    masked_df, direct_counts = mask_deterministic(df)
+    masked_df, indirect_count = mask_indirect(masked_df, model)
+    
+    total_counts = {
+        **direct_counts,
+        "indirect_pii_combinations": indirect_count
+    }
+    
+    return masked_df, total_counts
