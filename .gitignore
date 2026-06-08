@@ -52,6 +52,7 @@ streamlit/secrets.toml
 streamlit/config.toml
 data/
 *.csv
+!sample_data/mock_dataset.csv
 *.xlsx
 *.xls
 *.json

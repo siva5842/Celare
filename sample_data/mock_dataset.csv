@@ -1,0 +1,11 @@
+id,name,email,phone,pan,aadhaar,notes
+1,Rajesh Kumar,rajesh.kumar@example.com,9876543210,ABCDE1234F,1234 5678 9012,Contact rajesh.kumar@example.com for queries
+2,Priya Sharma,priya.sharma@company.co.in,9123456789,XYZPQ5678R,9876-5432-1098,Employee PAN: XYZPQ5678R, Aadhaar: 9876-5432-1098
+3,Amit Singh,amit.singh@test.org,8765432109,LMNOP9012S,567890123456,Log entry: Amit updated profile
+4,Neha Patel,neha.patel@domain.in,9988776655,QRSTU3456V,1111 2222 3333,Order 1234 confirmed for Neha Patel
+5,Vikram Reddy,vikram.reddy@email.com,9871234567,WXYZA7890B,4444-5555-6666,Vikram's contact: 9871234567
+6,Anita Desai,anita.desai@workplace.com,8123456789,BCDEF2345C,777788889999,Support ticket from Anita Desai
+7,Rahul Mehta,rahul.mehta@business.in,9012345678,DEFGH3456D,1212 3434 5656,Invoice #9876 sent to Rahul Mehta
+8,Sneha Verma,sneha.verma@testmail.com,7890123456,EFGHI4567E,7878-9090-1212,Meeting scheduled with Sneha Verma
+9,Karthik Iyer,karthik.iyer@example.org,9632587410,FGHIJ5678F,343456567878,Karthik Iyer - Project Lead
+10,Pooja Joshi,pooja.joshi@company.com,8529637410,GHIJK6789G,909012123434,Pooja Joshi: pooja.joshi@company.com
