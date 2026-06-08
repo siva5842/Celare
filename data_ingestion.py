@@ -1,70 +1,72 @@
 import pandas as pd
-from typing import Union, List, Optional
+from typing import Union
 
 
-def load_data(file_path: str) -> Union[pd.DataFrame, None]:
+def read_csv_safe(file_path: str, encodings: list = ['utf-8', 'latin-1', 'cp1252']) -> Union[pd.DataFrame, None]:
     """
-    Load data from various file formats into a pandas DataFrame.
+    Safely read a CSV file with multiple encoding fallback options.
     
     Args:
-        file_path: Path to the input file (supports CSV, Excel, JSON, Parquet, etc.).
-        
-    Returns:
-        Pandas DataFrame containing the loaded data, or None if loading fails.
+        file_path: Path to CSV file
+        encodings: List of encodings to try in order
     """
-    try:
-        if file_path.endswith('.csv'):
-            return pd.read_csv(file_path)
-        elif file_path.endswith(('.xlsx', '.xls')):
-            return pd.read_excel(file_path)
-        elif file_path.endswith('.json'):
-            return pd.read_json(file_path)
-        elif file_path.endswith('.parquet'):
-            return pd.read_parquet(file_path)
-        else:
-            raise ValueError(f"Unsupported file format: {file_path}")
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        return None
+    for encoding in encodings:
+        try:
+            return pd.read_csv(file_path, encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+        except Exception as e:
+            print(f"Error reading CSV with encoding {encoding}: {e}")
+    return None
 
 
-def save_data(data: pd.DataFrame, output_path: str) -> bool:
+def write_csv_safe(data: pd.DataFrame, file_path: str, encoding: str = 'utf-8') -> bool:
     """
-    Save a pandas DataFrame to a specified file path.
+    Safely write a DataFrame to CSV.
     
     Args:
-        data: Pandas DataFrame to save.
-        output_path: Path where the data will be saved.
-        
-    Returns:
-        True if saving succeeds, False otherwise.
+        data: Pandas DataFrame to write
+        file_path: Output file path
+        encoding: Encoding to use (default utf-8)
     """
     try:
-        if output_path.endswith('.csv'):
-            data.to_csv(output_path, index=False)
-        elif output_path.endswith(('.xlsx', '.xls')):
-            data.to_excel(output_path, index=False)
-        elif output_path.endswith('.json'):
-            data.to_json(output_path, orient='records')
-        elif output_path.endswith('.parquet'):
-            data.to_parquet(output_path, index=False)
-        else:
-            raise ValueError(f"Unsupported output format: {output_path}")
+        data.to_csv(file_path, index=False, encoding=encoding)
         return True
     except Exception as e:
-        print(f"Error saving data: {e}")
+        print(f"Error writing CSV: {e}")
         return False
 
 
-def sample_data(data: pd.DataFrame, sample_size: int = 100) -> pd.DataFrame:
+def read_json_safe(file_path: str, encodings: list = ['utf-8', 'latin-1']) -> Union[pd.DataFrame, None]:
     """
-    Generate a random sample from the input DataFrame.
+    Safely read JSON file with encoding fallback.
     
     Args:
-        data: Input pandas DataFrame.
-        sample_size: Number of rows to sample (default: 100).
-        
-    Returns:
-        Sampled pandas DataFrame.
+        file_path: Path to JSON file
+        encodings: List of encodings to try
     """
-    return data.sample(n=min(sample_size, len(data)), random_state=42)
+    for encoding in encodings:
+        try:
+            return pd.read_json(file_path, encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+        except Exception as e:
+            print(f"Error reading JSON with encoding {encoding}: {e}")
+    return None
+
+
+def write_json_safe(data: pd.DataFrame, file_path: str, encoding: str = 'utf-8') -> bool:
+    """
+    Safely write DataFrame to JSON.
+    
+    Args:
+        data: Pandas DataFrame to write
+        file_path: Output file path
+        encoding: Encoding to use
+    """
+    try:
+        data.to_json(file_path, orient='records', encoding=encoding)
+        return True
+    except Exception as e:
+        print(f"Error writing JSON: {e}")
+        return False

@@ -1,70 +1,72 @@
 import re
-from typing import List, Dict, Any
+import pandas as pd
+from typing import Tuple, Dict
 
 
-def detect_pii(text: str) -> List[Dict[str, Any]]:
+# Define PII patterns and their masks
+PII_PATTERNS: Dict[str, re.Pattern] = {
+    'email': re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),
+    'phone': re.compile(r'\b(?:\+91[-.\s]?)?[6-9]\d{9}\b'),
+    'pan': re.compile(r'\b[A-Z]{5}\d{4}[A-Z]\b'),
+    'aadhaar': re.compile(r'\b\d{4}[-.\s]?\d{4}[-.\s]?\d{4}\b')
+}
+
+PII_MASKS: Dict[str, str] = {
+    'email': '[EMAIL_MASKED]',
+    'phone': '[PHONE_MASKED]',
+    'pan': '[PAN_MASKED]',
+    'aadhaar': '[AADHAAR_MASKED]'
+}
+
+
+def mask_text(text: str) -> Tuple[str, Dict[str, int]]:
     """
-    Detect PII (Personally Identifiable Information) in a given text using regular expressions.
+    Mask PII in a single text string.
     
     Args:
-        text: Input text to analyze for PII.
+        text: Input text to mask
         
     Returns:
-        List of dictionaries, each containing 'type', 'value', 'start', and 'end' of detected PII.
+        Tuple of (masked_text, count_dict) where count_dict tracks masked PII counts per type
     """
-    pii_patterns = {
-        'email': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-        'phone': r'\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b',
-        'ssn': r'\b\d{3}[-.]?\d{2}[-.]?\d{4}\b',
-        'credit_card': r'\b(?:\d[ -]*?){13,16}\b',
-        'ip_address': r'\b(?:\d{1,3}\.){3}\d{1,3}\b',
-        'zip_code': r'\b\d{5}(?:[-.]?\d{4})?\b'
-    }
+    masked_text = text
+    counts = {key: 0 for key in PII_PATTERNS}
     
-    detected_pii = []
+    for pii_type, pattern in PII_PATTERNS.items():
+        matches = list(pattern.finditer(masked_text))
+        # Sort matches from end to start to preserve positions
+        for match in sorted(matches, key=lambda x: x.span()[0], reverse=True):
+            start, end = match.span()
+            masked_text = masked_text[:start] + PII_MASKS[pii_type] + masked_text[end:]
+            counts[pii_type] += 1
     
-    for pii_type, pattern in pii_patterns.items():
-        matches = re.finditer(pattern, text)
-        for match in matches:
-            detected_pii.append({
-                'type': pii_type,
-                'value': match.group(),
-                'start': match.start(),
-                'end': match.end()
-            })
-    
-    return detected_pii
+    return masked_text, counts
 
 
-def mask_pii(text: str, detected_pii: List[Dict[str, Any]], mask_char: str = '*') -> str:
+def mask_deterministic(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
-    Mask detected PII in text using a specified mask character.
+    Master function to mask PII in all string columns of a DataFrame.
     
     Args:
-        text: Original text containing PII.
-        detected_pii: List of detected PII from detect_pii function.
-        mask_char: Character to use for masking (default: '*').
+        df: Input pandas DataFrame
         
     Returns:
-        Text with PII masked.
+        Tuple of (masked_df, total_counts) where total_counts is total PII masked
     """
-    masked_text = list(text)
+    masked_df = df.copy()
+    total_counts = {key: 0 for key in PII_PATTERNS}
     
-    for pii in sorted(detected_pii, key=lambda x: x['start'], reverse=True):
-        masked_text[pii['start']:pii['end']] = [mask_char] * (pii['end'] - pii['start'])
+    for col in masked_df.select_dtypes(include=['object']).columns:
+        # Process each value once: mask and count
+        masked_values = []
+        for val in df[col]:
+            if pd.notna(val):
+                masked_text_val, counts = mask_text(str(val))
+                masked_values.append(masked_text_val)
+                for key in PII_PATTERNS:
+                    total_counts[key] += counts[key]
+            else:
+                masked_values.append(val)
+        masked_df[col] = masked_values
     
-    return ''.join(masked_text)
-
-
-def process_text(text: str) -> str:
-    """
-    End-to-end PII detection and masking for a given text.
-    
-    Args:
-        text: Input text to process.
-        
-    Returns:
-        Text with all detected PII masked.
-    """
-    detected = detect_pii(text)
-    return mask_pii(text, detected)
+    return masked_df, total_counts
