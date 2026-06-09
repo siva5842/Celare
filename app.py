@@ -28,6 +28,16 @@ if "temp_masked_files" not in st.session_state:
     st.session_state.temp_masked_files = {}
 
 # ------------------------------
+# Highlighting function
+# ------------------------------
+def highlight_masked(val):
+    """
+    Highlight cells containing masked text with light yellow background
+    """
+    color = "background-color: #FFF8DC" if "[REDACTED_IDENTITY]" in str(val) else ""
+    return color
+
+# ------------------------------
 # Sidebar
 # ------------------------------
 with st.sidebar:
@@ -72,7 +82,7 @@ if uploaded_file is not None:
             st.session_state.masked_df, st.session_state.pii_counts = mask_deterministic(st.session_state.active_df)
             st.session_state.processed = True
             
-            # Add to history
+            # Add to history immediately
             history_entry = {
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "filename": uploaded_file.name,
@@ -110,7 +120,7 @@ tab1, tab2 = st.tabs(["Dashboard", "History"])
 # Tab 1: Dashboard
 # ------------------------------
 with tab1:
-    if st.session_state.active_df is not None and st.session_state.processed:
+    if st.session_state.processed and st.session_state.masked_df is not None:
         # Metrics and Analytics
         st.subheader("PII Detection Overview")
         
@@ -122,22 +132,18 @@ with tab1:
         for i, (pii_type, display) in enumerate(zip(pii_types, display_names)):
             with metric_cols[i]:
                 count = st.session_state.pii_counts.get(pii_type, 0)
-                # Button with st.button, which sets session state
                 if st.button(f"{count} {display}", key=f"btn_{pii_type}", use_container_width=True):
                     st.session_state.selected_pii_type = pii_type
         
-        # Bar chart
+        # Bar chart (inside state check)
         st.subheader("Masked Entity Distribution")
         chart_data = pd.DataFrame.from_dict(st.session_state.pii_counts, orient='index', columns=['Count'])
         st.bar_chart(chart_data, color="#00FF88")
         
         st.markdown("---")
         
-        # Dataframe display with optional filtering
+        # Dataframe display with highlighting
         st.subheader("Data Preview")
-        
-        # Filter dataframe based on selected pii type
-        display_df = st.session_state.masked_df.copy()
         
         if st.session_state.selected_pii_type:
             st.info(f"Showing entries with {display_names[pii_types.index(st.session_state.selected_pii_type)]} (highlighted if masked)")
@@ -149,35 +155,37 @@ with tab1:
         
         with col2:
             st.markdown("### Masked Data")
-            st.dataframe(display_df, use_container_width=True)
+            styled_df = st.session_state.masked_df.style.applymap(highlight_masked)
+            st.dataframe(styled_df, use_container_width=True)
         
         st.markdown("---")
         
-        # Download options
-        st.subheader("Download Options")
-        export_col1, export_col2 = st.columns(2)
-        
-        with export_col1:
-            output_format = st.selectbox("Select Export Format", ["CSV", "JSON", "XLSX"])
-            if st.session_state.original_filename:
-                base_name = Path(st.session_state.original_filename).stem
-            else:
-                base_name = "masked_data"
-            output_filename = f"{base_name}_masked.{output_format.lower()}"
-            temp_output = Path(f"temp_output.{output_format.lower()}")
-            if save_data(st.session_state.masked_df, temp_output):
-                with open(temp_output, "rb") as f:
-                    st.download_button("⬇️ Download Masked File", f, output_filename, use_container_width=True)
-        
-        with export_col2:
-            # Verification report
-            report_content = "# Celare PII Detection Verification Report\n\n"
-            report_content += f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            report_content += "## Summary\n"
-            for pii_type, display in zip(pii_types, display_names):
-                report_content += f"- {display}: {st.session_state.pii_counts.get(pii_type, 0)}\n"
-            report_content += f"\nTotal PII Found: {sum(st.session_state.pii_counts.values())}"
-            st.download_button("📄 Download Verification Report", report_content, "verification_report.md", "text/markdown", use_container_width=True)
+        # Download options in container for alignment
+        with st.container():
+            st.subheader("Download Options")
+            export_col1, export_col2 = st.columns(2)
+            
+            with export_col1:
+                output_format = st.selectbox("Select Export Format", ["CSV", "JSON", "XLSX"])
+                if st.session_state.original_filename:
+                    base_name = Path(st.session_state.original_filename).stem
+                else:
+                    base_name = "masked_data"
+                output_filename = f"{base_name}_masked.{output_format.lower()}"
+                temp_output = Path(f"temp_output.{output_format.lower()}")
+                if save_data(st.session_state.masked_df, temp_output):
+                    with open(temp_output, "rb") as f:
+                        st.download_button("⬇️ Download Masked File", f, output_filename, use_container_width=True)
+            
+            with export_col2:
+                # Verification report
+                report_content = "# Celare PII Detection Verification Report\n\n"
+                report_content += f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                report_content += "## Summary\n"
+                for pii_type, display in zip(pii_types, display_names):
+                    report_content += f"- {display}: {st.session_state.pii_counts.get(pii_type, 0)}\n"
+                report_content += f"\nTotal PII Found: {sum(st.session_state.pii_counts.values())}"
+                st.download_button("📄 Download Verification Report", report_content, "verification_report.md", "text/markdown", use_container_width=True)
 
 # ------------------------------
 # Tab 2: History

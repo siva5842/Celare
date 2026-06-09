@@ -5,7 +5,7 @@ from typing import Tuple, Dict
 # Define PII patterns and standardized categorical tokens
 PII_PATTERNS: Dict[str, re.Pattern] = {
     "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
-    "phone": re.compile(r"\b(?:\+91[-.\s]?)?[6-9]\d{9}\b"),
+    "phone": re.compile(r'(?:\+91|0)?[6-9]\d{9}'),
     "pan": re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b"),
     "aadhaar": re.compile(r"\b\d{4}[-.\s]?\d{4}[-.\s]?\d{4}\b")
 }
@@ -44,7 +44,7 @@ def mask_text(text: str) -> Tuple[str, Dict[str, int]]:
 
 def mask_deterministic(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
-    Master function to mask direct PII in all string columns of a DataFrame.
+    Master function to mask direct PII in all columns of a DataFrame.
     
     Args:
         df: Input DataFrame
@@ -55,8 +55,8 @@ def mask_deterministic(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     masked_df = df.copy()
     total_counts = {key: 0 for key in PII_PATTERNS}
     
-    # Handle both 'object' and 'string' dtypes
-    for col in masked_df.select_dtypes(include=["object", "string"]).columns:
+    # Apply masks to ALL columns, regardless of dtype
+    for col in masked_df.columns:
         processed = []
         for val in df[col]:
             masked_val, counts = mask_text(val)
