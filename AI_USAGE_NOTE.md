@@ -41,6 +41,6 @@ Each step built on the previous with clear requirements for output quality and f
 All AI-generated code was reviewed for logic, security, and compliance. Git commit messages and project structure were manually validated.
 
 ## 5. Model Limitations
-- No LLM-based PII detection (llm_engine.py stub remains for future Ollama integration)
+- No LLM-based PII detection (llm_engine.py stub remains for future Ollama integration
 - Regex patterns can miss edge-case PII formats (addressed by upcoming Phase 2 LLM loop)
 - No multi-language support yet
